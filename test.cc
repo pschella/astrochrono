@@ -68,8 +68,8 @@ BOOST_AUTO_TEST_CASE(MJD) {
     auto ts = utc_clock::from_mjd(45205.125);
     BOOST_TEST(ts.time_since_epoch().count() == 399006000000000000LL);
     BOOST_TEST(timescale_cast<tai_clock>(ts).time_since_epoch().count() == 399006021000000000LL);
-    BOOST_TEST(to_mjd(ts) == 45205.125, tt::tolerance(1.e-5));
-    BOOST_TEST(to_mjd(timescale_cast<tai_clock>(ts)) == 45205.125 + 21.0 / 86400.0, tt::tolerance(1.e-5));
+    BOOST_TEST(to_mjd(ts).count() == 45205.125, tt::tolerance(1.e-5));
+    BOOST_TEST(to_mjd(timescale_cast<tai_clock>(ts)).count() == 45205.125 + 21.0 / 86400.0, tt::tolerance(1.e-5));
 }
 
 BOOST_AUTO_TEST_CASE(LeapSecond) {
@@ -107,14 +107,14 @@ BOOST_AUTO_TEST_CASE(Nsecs) {
     auto ts = utc_clock::time_point{sc::nanoseconds{1192755473000000000LL}};
     BOOST_TEST(ts.time_since_epoch().count() == 1192755473000000000LL);
     BOOST_TEST(timescale_cast<tai_clock>(ts).time_since_epoch().count() == 1192755506000000000LL);
-    BOOST_TEST(to_mjd(ts) == 54392.040196759262, tt::tolerance(1.e-5));
+    BOOST_TEST(to_mjd(ts).count() == 54392.040196759262, tt::tolerance(1.e-5));
 }
 
 BOOST_AUTO_TEST_CASE(BoundaryMJD) {
     auto ts = utc_clock::from_mjd(47892.0);
     BOOST_TEST(ts.time_since_epoch().count() == 631152000000000000LL);
     BOOST_TEST(timescale_cast<tai_clock>(ts).time_since_epoch().count() == 631152025000000000LL);
-    BOOST_TEST(to_mjd(ts) == 47892.0, tt::tolerance(1.e-9));
+    BOOST_TEST(to_mjd(ts).count() == 47892.0, tt::tolerance(1.e-9));
 }
 
 BOOST_AUTO_TEST_CASE(CrossBoundaryNsecs) {
@@ -127,14 +127,14 @@ BOOST_AUTO_TEST_CASE(NsecsTAI) {
     auto ts = tai_clock::time_point{sc::nanoseconds{1192755506000000000LL}};
     BOOST_TEST(timescale_cast<utc_clock>(ts).time_since_epoch().count() == 1192755473000000000LL);
     BOOST_TEST(ts.time_since_epoch().count() == 1192755506000000000LL);
-    BOOST_TEST(to_mjd(timescale_cast<utc_clock>(ts)) == 54392.040196759262, tt::tolerance(1.e-9));
+    BOOST_TEST(to_mjd(timescale_cast<utc_clock>(ts)).count() == 54392.040196759262, tt::tolerance(1.e-9));
 }
 
 BOOST_AUTO_TEST_CASE(NsecsDefault) {
     auto ts = tai_clock::time_point{sc::nanoseconds{1192755506000000000LL}};
     BOOST_TEST(timescale_cast<utc_clock>(ts).time_since_epoch().count() == 1192755473000000000LL);
     BOOST_TEST(ts.time_since_epoch().count() == 1192755506000000000LL);
-    BOOST_TEST(to_mjd(timescale_cast<utc_clock>(ts)) == 54392.040196759262, tt::tolerance(1.e-5));
+    BOOST_TEST(to_mjd(timescale_cast<utc_clock>(ts)).count() == 54392.040196759262, tt::tolerance(1.e-5));
 }
 
 BOOST_AUTO_TEST_CASE(IsoEpoch) {
@@ -306,7 +306,7 @@ BOOST_AUTO_TEST_CASE(NsecsTT) {
     BOOST_TEST(timescale_cast<utc_clock>(ts).time_since_epoch().count() == 1192755473000000000LL);
     BOOST_TEST(timescale_cast<tai_clock>(ts).time_since_epoch().count() == 1192755506000000000LL);
     BOOST_TEST(ts.time_since_epoch().count() == 1192755538184000000LL);
-    BOOST_TEST(to_mjd(timescale_cast<utc_clock>(ts)) == 54392.040196759262, tt::tolerance(1.e-5));
+    BOOST_TEST(to_mjd(timescale_cast<utc_clock>(ts)).count() == 54392.040196759262, tt::tolerance(1.e-5));
 }
 
 BOOST_AUTO_TEST_CASE(FracSecs) {

@@ -34,12 +34,12 @@
 
 namespace astrochrono {
 
-// Epoch = 1970 JAN  1 00:00:00 = JD 2440587.5 = MJD 40587.0
-static double constexpr MJD_TO_JD = 2400000.5;
-static double constexpr EPOCH_IN_MJD = 40587.0;
+// JD and MJD are typically expressed as, possibly fractional, days
+using days = std::chrono::duration<double, std::ratio<24 * 3600>>;
 
-/// Nanoseconds per day.
-static double constexpr NSEC_PER_DAY = 86.4e12;
+// Epoch = 1970 JAN  1 00:00:00 = JD 2440587.5 = MJD 40587.0
+static auto constexpr MJD_TO_JD = days{2400000.5};
+static auto constexpr EPOCH_IN_MJD = days{40587.0};
 
 class utc_clock {
 public:
@@ -49,8 +49,10 @@ public:
     using time_point = std::chrono::time_point<utc_clock>;
     static constexpr bool is_steady = false;
     static time_point now();
-    static time_point from_mjd(double mjd);
-    static time_point from_jd(double jd);
+    static time_point from_mjd(days mjd);
+    static time_point from_mjd(double mjd) { return from_mjd(static_cast<days>(mjd)); };
+    static time_point from_jd(days jd);
+    static time_point from_jd(double jd) { return from_jd(static_cast<days>(jd)); };
     static time_point from_calendar(int year, int month, int day, int hr, int min, int sec);
     static time_point from_string(std::string const &iso8601);
 };
@@ -63,8 +65,10 @@ public:
     using time_point = std::chrono::time_point<tai_clock>;
     static constexpr bool is_steady = false;
     static time_point now();
-    static time_point from_mjd(double mjd);
-    static time_point from_jd(double jd);
+    static time_point from_mjd(days mjd);
+    static time_point from_mjd(double mjd) { return from_mjd(static_cast<days>(mjd)); };
+    static time_point from_jd(days jd);
+    static time_point from_jd(double jd) { return from_jd(static_cast<days>(jd)); };
     static time_point from_calendar(int year, int month, int day, int hr, int min, int sec);
     static time_point from_string(std::string const &iso8601);
 };
@@ -77,8 +81,10 @@ public:
     using time_point = std::chrono::time_point<tt_clock>;
     static constexpr bool is_steady = false;
     static time_point now();
-    static time_point from_mjd(double mjd);
-    static time_point from_jd(double jd);
+    static time_point from_mjd(days mjd);
+    static time_point from_mjd(double mjd) { return from_mjd(static_cast<days>(mjd)); };
+    static time_point from_jd(days jd);
+    static time_point from_jd(double jd) { return from_jd(static_cast<days>(jd)); };
     static time_point from_calendar(int year, int month, int day, int hr, int min, int sec);
     static time_point from_string(std::string const &iso8601);
 };
@@ -117,13 +123,12 @@ template <typename TimePoint>
 std::string to_string(TimePoint const &);
 
 template <typename TimePoint>
-constexpr double to_mjd(TimePoint const &tp) noexcept {
-    double nsecs = std::chrono::duration_cast<std::chrono::nanoseconds>(tp.time_since_epoch()).count();
-    return nsecs / NSEC_PER_DAY + EPOCH_IN_MJD;
+constexpr days to_mjd(TimePoint const &tp) noexcept {
+    return std::chrono::duration_cast<days>(tp.time_since_epoch()) + EPOCH_IN_MJD;
 }
 
 template <typename TimePoint>
-constexpr double to_jd(TimePoint const &tp) noexcept {
+constexpr days to_jd(TimePoint const &tp) noexcept {
     return to_mjd(tp) + MJD_TO_JD;
 }
 

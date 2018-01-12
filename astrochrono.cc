@@ -30,18 +30,18 @@ namespace astrochrono {
 
 namespace {
 
-/// Nanoseconds per day/second as a std::int64_t.
-static std::int64_t constexpr LL_NSEC_PER_SEC = 1000000000LL;
-
 // Maximum number of days expressible as signed 64-bit nanoseconds.
 // 2^64 / 2 / 1e9 / 86400
 // NOTE: std::int64_t nsecs will wrap:
 // -- earliest date representable = sep 21, 1677 00:00:00
 // -- latest date representable   = apr 12, 2262 00:00:00
-static double constexpr MAX_DAYS = 106751.99;
+static auto constexpr MAX_DAYS = days{106751.99};
+
+/// Nanoseconds per day.
+// static double constexpr NSEC_PER_DAY = 86.4e12;
 
 // Difference between Terrestrial Time and TAI.
-static std::int64_t constexpr TT_MINUS_TAI_NSECS = 32184000000LL;
+static auto constexpr TT_MINUS_TAI = std::chrono::nanoseconds{32184000000LL};
 
 /* Leap second table as string.
  *
@@ -116,27 +116,27 @@ LeapTable::LeapTable(const char* leap_string) {
             " \\+ \\(MJD - ([\\d.]+)\\) X ([\\d.]+)\\s*S\n");
     for (auto i = std::cregex_iterator(leap_string, leap_string + strlen(leap_string), re);
          i != std::cregex_iterator(); ++i) {
-        double mjd_utc = strtod((*i)[1].first, 0) - MJD_TO_JD;
+        auto mjd_utc = static_cast<days>(strtod((*i)[1].first, 0)) - MJD_TO_JD;
         l.offset = strtod((*i)[2].first, 0);
         l.mjd_ref = strtod((*i)[3].first, 0);
         l.drift = strtod((*i)[4].first, 0);
-        l.when_utc = static_cast<std::int64_t>((mjd_utc - EPOCH_IN_MJD) * NSEC_PER_DAY);
-        l.when_tai =
-                l.when_utc + static_cast<std::int64_t>(1.0e9 * (l.offset + (mjd_utc - l.mjd_ref) * l.drift));
+        l.when_utc = std::chrono::duration_cast<std::chrono::nanoseconds>(mjd_utc - EPOCH_IN_MJD).count();
+        l.when_tai = l.when_utc +
+                     static_cast<std::int64_t>(1.0e9 * (l.offset + (mjd_utc.count() - l.mjd_ref) * l.drift));
         push_back(l);
     }
 }
 
-std::chrono::nanoseconds mjd_to_ns(double mjd) {
+std::chrono::nanoseconds mjd_to_ns(days mjd) {
     if (mjd > EPOCH_IN_MJD + MAX_DAYS || mjd < EPOCH_IN_MJD - MAX_DAYS) {
         throw std::domain_error("MJD out of valid range");
     }
-    return std::chrono::nanoseconds{static_cast<std::int64_t>((mjd - EPOCH_IN_MJD) * NSEC_PER_DAY)};
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(mjd - EPOCH_IN_MJD);
 }
 
 std::chrono::nanoseconds calendar_datetime_to_ns(int year, int month, int day, int hr, int min, int sec) {
-    int const minYear = 1902;
-    int const maxYear = 2261;
+    int constexpr minYear = 1902;
+    int constexpr maxYear = 2261;
     if ((year < minYear) || (year > maxYear)) {
         throw std::domain_error("Year out of valid range");
     }
@@ -183,7 +183,7 @@ std::chrono::nanoseconds calendar_datetime_to_ns(int year, int month, int day, i
             throw std::domain_error("Unconvertible date");
         }
     }
-    return std::chrono::nanoseconds{secs * LL_NSEC_PER_SEC};
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(static_cast<std::chrono::seconds>(secs));
 }
 
 // UTC has a "Z" suffix, TAI and TT do not
@@ -228,18 +228,19 @@ typename Clock::time_point time_point_from_string(std::string const& iso8601) {
             value *= 10;
             ++places;
         }
-        tp += std::chrono::nanoseconds{value};
+        tp += static_cast<std::chrono::nanoseconds>(value);
     }
     return tp;
 }
 
 template <typename TimePoint>
 std::string to_string(TimePoint const& tp, const char* suffix) {
+    using namespace std::chrono_literals;
     struct tm gmt(to_gmtime(tp));
 
-    std::int64_t fracnsecs = tp.time_since_epoch().count() % LL_NSEC_PER_SEC;
-    if (fracnsecs < 0) {
-        fracnsecs += LL_NSEC_PER_SEC;
+    std::chrono::nanoseconds fracnsecs = tp.time_since_epoch() % 1s;
+    if (fracnsecs.count() < 0) {
+        fracnsecs += 1s;
     }
 
     std::ostringstream os;
@@ -249,7 +250,7 @@ std::string to_string(TimePoint const& tp, const char* suffix) {
     os << std::setw(2) << std::setfill('0') << gmt.tm_hour << ":";
     os << std::setw(2) << std::setfill('0') << gmt.tm_min << ":";
     os << std::setw(2) << std::setfill('0') << gmt.tm_sec << ".";
-    os << std::setw(9) << std::setfill('0') << fracnsecs << suffix;
+    os << std::setw(9) << std::setfill('0') << fracnsecs.count() << suffix;
     return os.str();
 }
 
@@ -266,16 +267,15 @@ tai_clock::time_point timescale_cast<tai_clock>(utc_clock::time_point const& tp)
         throw std::domain_error("DateTime value too early for UTC->TAI conversion");
     }
     Leap const& l(leap_table[i - 1]);
-    double mjd = static_cast<double>(nsecs) / NSEC_PER_DAY + EPOCH_IN_MJD;
+    double mjd = to_mjd(tp).count();
     double leap_secs = l.offset + (mjd - l.mjd_ref) * l.drift;
     std::int64_t leap_nsecs = static_cast<std::int64_t>(leap_secs * 1.0e9 + 0.5);
-    return tai_clock::time_point{std::chrono::nanoseconds{nsecs + leap_nsecs}};
+    return tai_clock::time_point{static_cast<std::chrono::nanoseconds>(nsecs + leap_nsecs)};
 }
 
 template <>
 tai_clock::time_point timescale_cast<tai_clock>(tt_clock::time_point const& tp) {
-    std::int64_t nsecs = std::chrono::duration_cast<std::chrono::nanoseconds>(tp.time_since_epoch()).count();
-    return tai_clock::time_point{std::chrono::nanoseconds{nsecs - TT_MINUS_TAI_NSECS}};
+    return tai_clock::time_point{tp.time_since_epoch() - TT_MINUS_TAI};
 }
 
 template <>
@@ -289,12 +289,13 @@ utc_clock::time_point timescale_cast<utc_clock>(tai_clock::time_point const& tp)
         throw std::domain_error("DateTime value too early for TAI->UTC conversion");
     }
     Leap const& l(leap_table[i - 1]);
-    double mjd = static_cast<double>(nsecs) / NSEC_PER_DAY + EPOCH_IN_MJD;
+    double mjd = to_mjd(tp).count();
     double leap_secs = l.offset + (mjd - l.mjd_ref) * l.drift;
     // Correct for TAI MJD vs. UTC MJD.
-    leap_secs /= 1.0 + l.drift * 1.0e9 / NSEC_PER_DAY;
+    constexpr double SECONDS_PER_DAY = 24. * 3600.;
+    leap_secs /= 1.0 + l.drift / SECONDS_PER_DAY;
     std::int64_t leap_nsecs = static_cast<std::int64_t>(leap_secs * 1.0e9 + 0.5);
-    return utc_clock::time_point{std::chrono::nanoseconds{nsecs - leap_nsecs}};
+    return utc_clock::time_point{static_cast<std::chrono::nanoseconds>(nsecs - leap_nsecs)};
 }
 
 template <>
@@ -304,8 +305,7 @@ utc_clock::time_point timescale_cast<utc_clock>(tt_clock::time_point const& tp) 
 
 template <>
 tt_clock::time_point timescale_cast<tt_clock>(tai_clock::time_point const& tp) {
-    std::int64_t nsecs = std::chrono::duration_cast<std::chrono::nanoseconds>(tp.time_since_epoch()).count();
-    return tt_clock::time_point{std::chrono::nanoseconds{nsecs + TT_MINUS_TAI_NSECS}};
+    return tt_clock::time_point{tp.time_since_epoch() + TT_MINUS_TAI};
 }
 
 template <>
@@ -316,7 +316,8 @@ tt_clock::time_point timescale_cast<tt_clock>(utc_clock::time_point const& tp) {
 utc_clock::time_point utc_clock::now() {
     struct timeval tv;
     if (gettimeofday(&tv, 0) == 0) {
-        return time_point{std::chrono::nanoseconds{tv.tv_sec * LL_NSEC_PER_SEC + tv.tv_usec * 1000LL}};
+        return time_point{static_cast<std::chrono::seconds>(tv.tv_sec) +
+                          static_cast<std::chrono::microseconds>(tv.tv_usec)};
     } else {
         throw std::runtime_error("Failed to get current time");
     }
@@ -326,17 +327,17 @@ tai_clock::time_point tai_clock::now() { return timescale_cast<tai_clock>(utc_cl
 
 tt_clock::time_point tt_clock::now() { return timescale_cast<tt_clock>(utc_clock::now()); }
 
-utc_clock::time_point utc_clock::from_mjd(double mjd) { return time_point{mjd_to_ns(mjd)}; }
+utc_clock::time_point utc_clock::from_mjd(days mjd) { return time_point{mjd_to_ns(mjd)}; }
 
-utc_clock::time_point utc_clock::from_jd(double jd) { return utc_clock::from_mjd(jd - MJD_TO_JD); }
+utc_clock::time_point utc_clock::from_jd(days jd) { return utc_clock::from_mjd(jd - MJD_TO_JD); }
 
-tai_clock::time_point tai_clock::from_mjd(double mjd) { return time_point{mjd_to_ns(mjd)}; }
+tai_clock::time_point tai_clock::from_mjd(days mjd) { return time_point{mjd_to_ns(mjd)}; }
 
-tai_clock::time_point tai_clock::from_jd(double jd) { return tai_clock::from_mjd(jd - MJD_TO_JD); }
+tai_clock::time_point tai_clock::from_jd(days jd) { return tai_clock::from_mjd(jd - MJD_TO_JD); }
 
-tt_clock::time_point tt_clock::from_mjd(double mjd) { return time_point{mjd_to_ns(mjd)}; }
+tt_clock::time_point tt_clock::from_mjd(days mjd) { return time_point{mjd_to_ns(mjd)}; }
 
-tt_clock::time_point tt_clock::from_jd(double jd) { return tt_clock::from_mjd(jd - MJD_TO_JD); }
+tt_clock::time_point tt_clock::from_jd(days jd) { return tt_clock::from_mjd(jd - MJD_TO_JD); }
 
 utc_clock::time_point utc_clock::from_calendar(int year, int month, int day, int hr, int min, int sec) {
     return time_point{calendar_datetime_to_ns(year, month, day, hr, min, sec)};
@@ -364,35 +365,38 @@ tt_clock::time_point tt_clock::from_string(std::string const& iso8601) {
 
 template <typename TimePoint>
 struct tm to_gmtime(TimePoint const& tp) {
+    using namespace std::chrono_literals;
     struct tm gmt;
     // Round to negative infinity
     auto nsecs = std::chrono::duration_cast<std::chrono::nanoseconds>(tp.time_since_epoch());
-    std::int64_t frac = nsecs.count() % LL_NSEC_PER_SEC;
-    if (nsecs.count() < 0 && frac < 0) {
-        nsecs -= static_cast<std::chrono::nanoseconds>(LL_NSEC_PER_SEC + frac);
+    auto frac = nsecs % 1s;
+    if (nsecs.count() < 0 && frac.count() < 0) {
+        nsecs -= 1s + frac;
     } else {
-        nsecs -= static_cast<std::chrono::nanoseconds>(frac);
+        nsecs -= frac;
     }
-    time_t secs = static_cast<time_t>(nsecs.count() / LL_NSEC_PER_SEC);
+    time_t secs = static_cast<time_t>(std::chrono::duration_cast<std::chrono::seconds>(nsecs).count());
     gmtime_r(&secs, &gmt);
     return gmt;
 }
 
 template <typename TimePoint>
 struct timespec to_timespec(TimePoint const& tp) {
+    using namespace std::chrono_literals;
     struct timespec ts;
-    auto nsecs = std::chrono::duration_cast<std::chrono::nanoseconds>(tp.time_since_epoch());
-    ts.tv_sec = static_cast<time_t>(nsecs.count() / LL_NSEC_PER_SEC);
-    ts.tv_nsec = static_cast<int>(nsecs.count() % LL_NSEC_PER_SEC);
+    auto t = tp.time_since_epoch();
+    ts.tv_sec = static_cast<time_t>(std::chrono::duration_cast<std::chrono::seconds>(t).count());
+    ts.tv_nsec = static_cast<int>((std::chrono::duration_cast<std::chrono::nanoseconds>(t) % 1s).count());
     return ts;
 }
 
 template <typename TimePoint>
 struct timeval to_timeval(TimePoint const& tp) {
+    using namespace std::chrono_literals;
     struct timeval tv;
-    auto nsecs = std::chrono::duration_cast<std::chrono::nanoseconds>(tp.time_since_epoch());
-    tv.tv_sec = static_cast<time_t>(nsecs.count() / LL_NSEC_PER_SEC);
-    tv.tv_usec = static_cast<int>((nsecs.count() % LL_NSEC_PER_SEC) / 1000);
+    auto t = tp.time_since_epoch();
+    tv.tv_sec = static_cast<time_t>(std::chrono::duration_cast<std::chrono::seconds>(t).count());
+    tv.tv_usec = static_cast<int>((std::chrono::duration_cast<std::chrono::microseconds>(t) % 1s).count());
     return tv;
 }
 
