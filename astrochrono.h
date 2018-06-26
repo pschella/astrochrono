@@ -45,7 +45,7 @@ class utc_clock {
 public:
     using duration = std::chrono::nanoseconds;
     using rep = typename duration::rep;
-    using period = typename duration::rep;
+    using period = typename duration::period;
     using time_point = std::chrono::time_point<utc_clock>;
     static constexpr bool is_steady = false;
     static time_point now();
@@ -61,7 +61,7 @@ class tai_clock {
 public:
     using duration = std::chrono::nanoseconds;
     using rep = typename duration::rep;
-    using period = typename duration::rep;
+    using period = typename duration::period;
     using time_point = std::chrono::time_point<tai_clock>;
     static constexpr bool is_steady = false;
     static time_point now();
@@ -77,7 +77,7 @@ class tt_clock {
 public:
     using duration = std::chrono::nanoseconds;
     using rep = typename duration::rep;
-    using period = typename duration::rep;
+    using period = typename duration::period;
     using time_point = std::chrono::time_point<tt_clock>;
     static constexpr bool is_steady = false;
     static time_point now();
